@@ -1,0 +1,20 @@
+{
+    "extends": [
+        "./tsconfig.json"
+    ],
+    "compilerOptions": {
+        "importHelpers": false,
+        "module": "es2015",
+        "noEmit": false,
+        "outDir": "./esm",
+        "target": "es2019"
+    },
+    "include": [
+        "src/",
+        "next-env.d.ts"
+    ],
+    "exclude": [
+        "src/**/*.spec.ts",
+        "src/__test/**"
+    ]
+}
