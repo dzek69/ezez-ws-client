@@ -1,8 +1,36 @@
-import React from "react";
-import { Index } from "..";
+import React, { useEffect } from "react";
 
-const IndexComp = () => (
-    <Index />
-);
+import { rethrow, waitFor } from "@ezez/utils";
 
-export default IndexComp;
+import { EZEZWebSocketClient } from "../Client";
+
+const Index: React.FC = (props) => {
+    useEffect(() => {
+        const ws = new EZEZWebSocketClient<{ this: [number]; hello: [number]; kaczka: [string] }>("ws://127.0.0.1:6565", undefined, {
+            // auth: "some-code",
+        });
+
+        console.log("ws started");
+
+        (async () => {
+            await waitFor(() => ws.alive);
+            ws.send("hello", 1);
+            ws.send("hello", "s");
+            ws.send("kaczka", "s");
+            ws.send("this", 1);
+            ws.send("ping");
+        })().catch(rethrow);
+
+        return () => {
+            ws.close();
+        };
+    }, []);
+
+    return (
+        <h1>
+            Check out the console
+        </h1>
+    );
+};
+
+export default Index;
