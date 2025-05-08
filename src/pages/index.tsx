@@ -7,7 +7,11 @@ import { EZEZWebSocketClient } from "../Client";
 const Index: React.FC = (props) => {
     useEffect(() => {
         const ws = new EZEZWebSocketClient<{ this: [number]; hello: [number]; kaczka: [string] }>("ws://127.0.0.1:6565", undefined, {
-            // auth: "some-code",
+            auth: "some-code",
+        }, {
+            onAuthOk: () => {
+                console.log("auth ok");
+            },
         });
 
         console.log("ws started");
