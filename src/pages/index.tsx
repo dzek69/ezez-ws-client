@@ -11,6 +11,21 @@ const Index: React.FC = (props) => {
         }, {
             onAuthOk: () => {
                 console.log("auth ok");
+                ws.send("ping1", [], (eventName, args, reply, ids) => {
+                    console.log("i got a response", eventName);
+                    const replyId = reply("ping2", [1], (ee) => {
+                        console.log("got a pong 2 hopefully", ee);
+                    });
+                    console.log("replied to", ids.eventId, "with", replyId);
+                });
+            },
+            onMessage: (eventName, args, reply, ids) => {
+                console.log("got some message", {
+                    eventName,
+                    args,
+                    reply,
+                    ids,
+                });
             },
         });
 
@@ -18,11 +33,11 @@ const Index: React.FC = (props) => {
 
         (async () => {
             await waitFor(() => ws.alive);
-            ws.send("hello", 1);
-            ws.send("hello", "s");
-            ws.send("kaczka", "s");
-            ws.send("this", 1);
-            ws.send("ping");
+            // ws.send("hello", 1);
+            // ws.send("hello", "s");
+            // ws.send("kaczka", "s");
+            // ws.send("this", 1);
+            // ws.send("ping");
         })().catch(rethrow);
 
         return () => {
