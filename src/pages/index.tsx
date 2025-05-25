@@ -1,12 +1,16 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 
 import { rethrow, waitFor } from "@ezez/utils";
 
 import { EZEZWebSocketClient } from "../Client";
 
+type Events = { this: [number]; hello: [number]; kaczka: [string] };
+
 const Index: React.FC = (props) => {
+    const wsRef = useRef<EZEZWebSocketClient<Events>>();
+
     useEffect(() => {
-        const ws = new EZEZWebSocketClient<{ this: [number]; hello: [number]; kaczka: [string] }>("ws://127.0.0.1:6565", undefined, {
+        const ws = new EZEZWebSocketClient<Events>("ws://127.0.0.1:6565", undefined, {
             auth: "some-code",
         }, {
             onAuthOk: () => {
@@ -40,14 +44,26 @@ const Index: React.FC = (props) => {
             // ws.send("ping");
         })().catch(rethrow);
 
+        wsRef.current = ws;
+
         return () => {
             ws.close();
+            wsRef.current = undefined;
         };
     }, []);
+
+    const handleButtonClick = () => {
+        if (!wsRef.current) {
+            console.error("WebSocket client is not initialized");
+            return;
+        }
+        wsRef.current.send("hello", [42]);
+    };
 
     return (
         <h1>
             Check out the console
+            <button onClick={handleButtonClick}>Send message</button>
         </h1>
     );
 };

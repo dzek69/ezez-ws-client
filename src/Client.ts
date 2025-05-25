@@ -1,17 +1,11 @@
 import { rethrow, serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
 
-import type { AwaitingReply, Callbacks, Ids, ReplyTupleUnion, TEvents } from "./types";
+import type { AwaitingReply, Callbacks, Ids, Options, ReplyTupleUnion, TEvents } from "./types";
 
 import { EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_AUTH } from "./types";
 
-type Options = {
-    autoReconnect: boolean;
-    auth: string;
-    serializerArgs?: Parameters<typeof serializeToBuffer>[1];
-    unserializerArgs?: Parameters<typeof unserializeFromBuffer>[1];
-};
-
 const defaultOptions: Options = {
+    sendWhenNotConnected: "queueAfterAuth",
     autoReconnect: true,
     auth: "",
 };
@@ -33,6 +27,12 @@ class EZEZWebSocketClient<Events extends TEvents> {
 
     private _id = 0;
 
+    /**
+     * Did the client close the connection at least once? Used to determine if the message should be queued or ignored
+     * when autoReconnect is disabled.
+     */
+    private _closedOnce = false;
+
     private readonly _serialize: (...args: unknown[]) => Buffer;
 
     private readonly _unserialize: (rawData: (Buffer | Uint8Array)) => unknown[];
@@ -40,7 +40,9 @@ class EZEZWebSocketClient<Events extends TEvents> {
     private readonly _awaitingReplies: AwaitingReply<Events>[] = [];
 
     private readonly _queue: {
-        [K in keyof Events]: [K, Events[K]];
+        [K in keyof Events]: [K, Events[K], undefined | (<REvent extends ReplyTupleUnion<Events, typeof this.send>>(
+            ...replyArgs: REvent
+        ) => void)];
     }[keyof Events][] = [];
 
     private readonly _callbacks: Callbacks<Events>;
@@ -74,7 +76,6 @@ class EZEZWebSocketClient<Events extends TEvents> {
         this._connect();
     }
 
-    // TODO handle sending queue
     private _connect() {
         this._client = new WebSocket(this._url, this._protocols);
         this._client.addEventListener("close", this._handleClose);
@@ -83,6 +84,7 @@ class EZEZWebSocketClient<Events extends TEvents> {
     }
 
     private readonly _handleClose = () => {
+        this._closedOnce = true;
         this._client!.removeEventListener("close", this._handleClose);
         this._client!.removeEventListener("open", this._handleOpen);
         this._client!.removeEventListener("message", this._handleMessage);
@@ -116,7 +118,10 @@ class EZEZWebSocketClient<Events extends TEvents> {
 
             if (eventName === EVENT_AUTH_OK) {
                 this._callbacks.onAuthOk?.();
-                // TODO send the queue
+                this._queue.forEach(([queuedEventName, queuedArgs, queuedReply]) => {
+                    this.send(queuedEventName, queuedArgs, queuedReply);
+                });
+                this._queue.length = 0;
                 return;
             }
             if (eventName === EVENT_AUTH_REJECTED) {
@@ -154,7 +159,22 @@ class EZEZWebSocketClient<Events extends TEvents> {
     ): Ids | undefined {
         const client = this._client!;
         if (!this.alive) {
-            // TODO config what to do? crash, ignore
+            if (this._options.sendWhenNotConnected === "throw") {
+                throw new Error("Can't send message - client is disconnected");
+            }
+            if (this._options.sendWhenNotConnected === "ignore") {
+                return;
+            }
+
+            if (!this._autoReconnect && this._closedOnce) {
+                // If the client was closed at least once and the autoReconnect is disabled, then there will be no
+                // opportunity to send the message, so we ignore it
+                return;
+            }
+
+            // The connection had not been established yet
+            this._queue.push([eventName, args, onReply]);
+
             return;
         }
 
@@ -173,18 +193,11 @@ class EZEZWebSocketClient<Events extends TEvents> {
         return { eventId: this._id, replyTo: replyId };
     }
 
-    // public sendQueue<TEvent extends keyof Events>(eventName: TEvent, ...args: Events[TEvent]) {
-    //     const client = this._client!;
-    //     if (!this.alive) {
-    //         this._queue.push([eventName, args]);
-    //         return;
-    //     }
-    //     client.send(this._serialize(eventName, ++this._id, ...args));
-    // }
-
     /**
-     * Get raw WebSocket client, please note that this is current client and if reconnect happens you need to get it
-     * again, or you will just keep the reference to the old one.
+     * Get raw WebSocket client, please note that this is current client and if reconnect happens you need to get the
+     * new client again or you will just keep the reference to the old one.
+     *
+     * Additionally be warned that sending messages directly to the WebSocket client is not recommended.
      */
     public get client() {
         return this._client;

@@ -1,3 +1,4 @@
+import type { serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
 import type { EZEZWebSocketClient } from "./Client";
 
 const EVENT_AUTH = "ezez-ws::auth";
@@ -48,6 +49,36 @@ type AwaitingReply<Events extends TEvents> = {
     onReply: NonNullable<Callbacks<Events>["onMessage"]>;
 };
 
+type Options = {
+    /**
+     * Should the client automatically reconnect when the connection is closed?
+     * Notice, if the auth is rejected or `close()` function is called manually, the client will not reconnect.
+     */
+    autoReconnect: boolean;
+    /**
+     * Auth key to send to the server.
+     */
+    auth: string;
+    /**
+     * Custom data serializer options, see `@ezez/utils - serializeToBuffer`
+     * Your custom serializer must be compatible with custom deserializer on the server side
+     */
+    serializerArgs?: Parameters<typeof serializeToBuffer>[1];
+    /**
+     * Custom data unserializer options, see `@ezez/utils - unserializeFromBuffer`
+     * Your custom unserializer must be compatible with custom serializer on the server side
+     */
+    unserializerArgs?: Parameters<typeof unserializeFromBuffer>[1];
+    /**
+     * How to handle messages that client tries to send when not connected to the server.
+     * - "ignore": ignore the message
+     * - "throw": throw an error
+     * - "queueAfterAuth": queue the message until reconnected and authentication is successful (message won't be queued
+     * if the connection is closed manually or auth is rejected)
+     */
+    sendWhenNotConnected?: "ignore" | "throw" | "queueAfterAuth";
+};
+
 export {
     EVENT_AUTH,
     EVENT_AUTH_OK,
@@ -60,4 +91,5 @@ export type {
     Callbacks,
     Ids,
     AwaitingReply,
+    Options,
 };
