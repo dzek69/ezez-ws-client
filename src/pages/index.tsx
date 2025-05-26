@@ -21,17 +21,28 @@ const Index: React.FC = (props) => {
             auth: "some-code",
         }, {
             onAuthOk: () => {
-                console.log("auth ok");
-                ws.send("ping1", [], (eventName, args, reply, ids) => {
-                    console.log("i got a response", eventName);
-                    const replyId = reply("ping2", [1], (ee) => {
-                        console.log("got a pong 2 hopefully", ee);
-                    });
-                    console.log("replied to", ids.eventId, "with", replyId);
+                console.info("auth ok");
+                // ws.send("ping1", [], (eventName, args, reply, ids) => {
+                //     console.info("i got a response", eventName);
+                //     const replyId = reply("ping2", [1], (ee) => {
+                //         console.info("got a pong 2 hopefully", ee);
+                //     });
+                //     console.info("replied to", ids.eventId, "with", replyId);
+                // });
+                ws.send("ping1", []);
+                ws.on("pong2", () => {
+                    console.info("got pong2");
+                });
+                ws.on("pong1", (args, reply, ids) => {
+                    console.info("got pong1 reply", args, ids);
+                    reply("ping2", [1], /* (eventName, args, reply, ids) => {
+                        console.info("got a pong2 reply", eventName, args, ids);
+                        reply("pong2", []);
+                    } */);
                 });
             },
             onMessage: (eventName, args, reply, ids) => {
-                console.log("got some message", {
+                console.info("got some message", {
                     eventName,
                     args,
                     reply,
@@ -40,7 +51,7 @@ const Index: React.FC = (props) => {
             },
         });
 
-        console.log("ws started");
+        console.info("ws started");
 
         (async () => {
             await waitFor(() => ws.alive);

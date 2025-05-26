@@ -1,6 +1,7 @@
 import { rethrow, serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
+import EventEmitter from "eventemitter3";
 
-import type { AwaitingReply, Callbacks, Ids, Options, ReplyTupleUnion, TEvents } from "./types";
+import type { AwaitingReply, Callbacks, EventsToEventEmitter, Ids, Options, ReplyTupleUnion, TEvents } from "./types";
 
 import { EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_AUTH } from "./types";
 
@@ -66,6 +67,37 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         ) => void,
     ) => Ids | undefined;
 
+    private readonly _ee: EventEmitter<EventsToEventEmitter<
+        IncomingEvents, OutgoingEvents,
+        EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
+    >>;
+
+    /**
+     * Registers an event listener for given event.
+     * Please note that if a message is a reply and `onReply` function was given, then this listener will not be called.
+     */
+    public readonly on: OmitThisParameter<EventEmitter<EventsToEventEmitter<
+        IncomingEvents, OutgoingEvents,
+        EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
+    >>["on"]>;
+
+    /**
+     * Unregisters an event listener for given event.
+     */
+    public readonly off: OmitThisParameter<EventEmitter<EventsToEventEmitter<
+        IncomingEvents, OutgoingEvents,
+        EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
+    >>["off"]>;
+
+    /**
+     * Registers an event listener for given event, which will be called only once.
+     * Please note that if a message is a reply and `onReply` function was given, then this listener will not be called.
+     */
+    public readonly once: OmitThisParameter<EventEmitter<EventsToEventEmitter<
+        IncomingEvents, OutgoingEvents,
+        EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
+    >>["once"]>;
+
     public constructor(
         url: ConstructorParameters<typeof WebSocket>[0], protocols?: ConstructorParameters<typeof WebSocket>[1],
         options: Partial<Options> = {},
@@ -76,6 +108,10 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         this._options = { ...defaultOptions, ...options };
         this._autoReconnect = this._options.autoReconnect;
         this._callbacks = callbacks ?? {};
+        this._ee = new EventEmitter();
+        this.on = this._ee.on.bind(this._ee);
+        this.off = this._ee.off.bind(this._ee);
+        this.once = this._ee.once.bind(this._ee);
 
         this._serialize = serializeToBuffer.bind(null, Buffer, options.serializerArgs ?? []);
         this._unserialize = unserializeFromBuffer.bind(null, Buffer, options.unserializerArgs ?? []);
@@ -136,6 +172,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
                 return;
             }
             if (eventName === EVENT_AUTH_REJECTED) {
+                this._ee.removeAllListeners();
                 this._callbacks.onAuthRejected?.(data[1] as string);
                 this._autoReconnect = false;
                 return;
@@ -155,6 +192,8 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
             }
 
             this._callbacks.onMessage?.(eventName, args, replyFn, { eventId, replyTo });
+            // @ts-expect-error not sure why emit does not like the type, `on` works flawlessly
+            this._ee.emit(eventName, args, replyFn, { eventId, replyTo });
         })().catch(rethrow);
     };
 
@@ -220,6 +259,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
      * Close the connection and stop auto reconnecting.
      */
     public close() {
+        this._ee.removeAllListeners();
         this._autoReconnect = false;
         this._client!.close();
     }

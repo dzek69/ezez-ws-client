@@ -35,6 +35,7 @@
   "dependencies": {
     "@ezez/utils": "^4.5.0",
     "buffer": "^6.0.3",
+    "eventemitter3": "^5.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -58,7 +59,7 @@
     "resolve-tspaths": "^0.8.15",
     "sass": "^1.35.2",
     "ts-node": "^10.9.2",
-    "typedoc": "0.26.0-beta.2",
+    "typedoc": "^0.28.4",
     "typescript": "^5.4.5"
   },
   "husky": {
@@ -71,5 +72,6 @@
     "language": "typescript",
     "fixDefaultForCommonJS": true,
     "jsx": true
-  }
+  },
+  "packageManager": "pnpm@10.11.0"
 }

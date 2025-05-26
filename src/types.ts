@@ -9,6 +9,17 @@ type ReservedNames = `ezez-ws::${string}`;
 type ReservedEventKeys<T extends string> = {
     [K in T]?: never;
 };
+
+/**
+ * Generic type representing all events with the data that will come with them.
+ * @example
+ * ```typescript
+ * type IncomingEvents = {
+ *     addItem: [item: string, quantity: number],
+ *     removeItem: [item: string],
+ * }
+ * ```
+ */
 type TEvents = Record<string, unknown[]> & ReservedEventKeys<ReservedNames>;
 
 type Ids = {
@@ -25,6 +36,13 @@ type ReplyTupleUnion<
     ]
 }[keyof IncomingEvents];
 
+type EventsToEventEmitter<
+    IncomingEvents extends TEvents, OutgoingEvents extends TEvents,
+    Client extends EZEZWebSocketClient<IncomingEvents, OutgoingEvents>,
+> = {
+    [K in keyof IncomingEvents]: (args: IncomingEvents[K], reply: Client["send"], ids: Ids) => void
+};
+
 type Callbacks<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = IncomingEvents> = {
     /**
      * Called when the client is authenticated successfully.
@@ -33,10 +51,16 @@ type Callbacks<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = 
      */
     onAuthOk?: () => void;
     /**
-     * Called when the client is rejected. Auto reconnect is disabled after this event.
+     * Called when the client got rejected during authentication. Auto reconnect is disabled after this event and you
+     * need to create a new instance of the client to try again.
      * @param reason
      */
     onAuthRejected?: (reason: string) => void;
+    /**
+     * Called when a message (any event) is received from the server.
+     * Use @{link EZEZWebSocketClient["on"]} to listen for specific events.
+     * Please note that if a message is a reply and `onReply` function was given, then this listener will not be called.
+     */
     onMessage?: <REvent extends ReplyTupleUnion<
         IncomingEvents, OutgoingEvents, EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
     >>(
@@ -95,6 +119,7 @@ export {
 export type {
     TEvents,
     ReplyTupleUnion,
+    EventsToEventEmitter,
     Callbacks,
     Ids,
     AwaitingReply,
