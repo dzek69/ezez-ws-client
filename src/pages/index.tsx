@@ -4,13 +4,20 @@ import { rethrow, waitFor } from "@ezez/utils";
 
 import { EZEZWebSocketClient } from "../Client";
 
-type Events = { this: [number]; hello: [number]; kaczka: [string] };
+type OutgoingEvents = {
+    ping1: [];
+    ping2: [number];
+};
 
+type IncomingEvents = {
+    pong1: [string];
+    pong2: [];
+};
 const Index: React.FC = (props) => {
-    const wsRef = useRef<EZEZWebSocketClient<Events>>();
+    const wsRef = useRef<EZEZWebSocketClient<IncomingEvents, OutgoingEvents>>();
 
     useEffect(() => {
-        const ws = new EZEZWebSocketClient<Events>("ws://127.0.0.1:6565", undefined, {
+        const ws = new EZEZWebSocketClient<IncomingEvents, OutgoingEvents>("ws://127.0.0.1:6565", undefined, {
             auth: "some-code",
         }, {
             onAuthOk: () => {

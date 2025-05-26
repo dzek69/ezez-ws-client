@@ -14,7 +14,7 @@ const RECONNECT_TIMEOUT = 1000;
 const PROTOCOL_VERSION = 1;
 const NOT_FOUND = -1;
 
-class EZEZWebSocketClient<Events extends TEvents> {
+class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = IncomingEvents> {
     private readonly _url: ConstructorParameters<typeof WebSocket>[0];
 
     private readonly _protocols: ConstructorParameters<typeof WebSocket>[1];
@@ -37,20 +37,31 @@ class EZEZWebSocketClient<Events extends TEvents> {
 
     private readonly _unserialize: (rawData: (Buffer | Uint8Array)) => unknown[];
 
-    private readonly _awaitingReplies: AwaitingReply<Events>[] = [];
+    /**
+     * List of sent messages that are waiting for a reply.
+     */
+    private readonly _awaitingReplies: AwaitingReply<IncomingEvents, OutgoingEvents>[] = [];
 
     private readonly _queue: {
-        [K in keyof Events]: [K, Events[K], undefined | (<REvent extends ReplyTupleUnion<Events, typeof this.send>>(
-            ...replyArgs: REvent
-        ) => void)];
-    }[keyof Events][] = [];
+        [K in keyof OutgoingEvents]: [
+            K, OutgoingEvents[K], undefined | (
+                <REvent extends ReplyTupleUnion<
+                    IncomingEvents, OutgoingEvents, EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
+                >>(
+                    ...replyArgs: REvent
+                ) => void
+            ),
+        ];
+    }[keyof OutgoingEvents][] = [];
 
-    private readonly _callbacks: Callbacks<Events>;
+    private readonly _callbacks: Callbacks<IncomingEvents, OutgoingEvents>;
 
-    public send: <TEvent extends keyof Events>(
+    public send: <TEvent extends keyof OutgoingEvents>(
         eventName: TEvent,
-        args: Events[TEvent],
-        onReply?: <REvent extends ReplyTupleUnion<Events, typeof this.send>>(
+        args: OutgoingEvents[TEvent],
+        onReply?: <REvent extends ReplyTupleUnion<
+            IncomingEvents, OutgoingEvents, EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
+        >>(
             ...replyArgs: REvent
         ) => void,
     ) => Ids | undefined;
@@ -58,7 +69,7 @@ class EZEZWebSocketClient<Events extends TEvents> {
     public constructor(
         url: ConstructorParameters<typeof WebSocket>[0], protocols?: ConstructorParameters<typeof WebSocket>[1],
         options: Partial<Options> = {},
-        callbacks?: Callbacks<Events>,
+        callbacks?: Callbacks<IncomingEvents>,
     ) {
         this._url = url;
         this._protocols = protocols;
@@ -111,9 +122,9 @@ class EZEZWebSocketClient<Events extends TEvents> {
             const buffer = new Uint8Array(await message.arrayBuffer());
             const data = this._unserialize(buffer);
 
-            const eventName = data[0] as keyof Events;
+            const eventName = data[0] as keyof IncomingEvents;
             const [, eventId, replyTo, ...args] = data as [
-                keyof Events, number, number | null, ...Events[typeof eventName],
+                keyof IncomingEvents, number, number | null, ...IncomingEvents[typeof eventName],
             ];
 
             if (eventName === EVENT_AUTH_OK) {
@@ -130,7 +141,7 @@ class EZEZWebSocketClient<Events extends TEvents> {
                 return;
             }
 
-            type ReplyFn = Parameters<NonNullable<Callbacks<Events>["onMessage"]>>[2];
+            type ReplyFn = Parameters<NonNullable<Callbacks<IncomingEvents, OutgoingEvents>["onMessage"]>>[2];
             const replyFn: ReplyFn = (_eventName, _args, onReply) => this._send(_eventName, _args, eventId, onReply);
 
             if (replyTo) {
@@ -151,9 +162,11 @@ class EZEZWebSocketClient<Events extends TEvents> {
         return this._client?.readyState === WebSocket.OPEN;
     }
 
-    private _send<TEvent extends keyof Events>(
-        eventName: TEvent, args: Events[TEvent], replyId: number | null = null,
-        onReply?: <REvent extends ReplyTupleUnion<Events, typeof this.send>>(
+    private _send<TEvent extends keyof OutgoingEvents>(
+        eventName: TEvent, args: OutgoingEvents[TEvent], replyId: number | null = null,
+        onReply?: <REvent extends ReplyTupleUnion<
+            IncomingEvents, OutgoingEvents, EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
+        >>(
             ...replyArgs: REvent
         ) => void,
     ): Ids | undefined {
