@@ -82,14 +82,14 @@ const Index: React.FC = () => {
     const handleButtonClick = () => {
         if (!wsRef.current) {
             console.error("WebSocket client is not initialized");
-            return;
         }
-        wsRef.current.send("hello", [42]);
+        // wsRef.current.send("hello", [42]);
     };
 
     return (
         <h1>
             Check out the console
+            {/* eslint-disable-next-line react/jsx-no-bind */}
             <button onClick={handleButtonClick}>Send message</button>
         </h1>
     );
