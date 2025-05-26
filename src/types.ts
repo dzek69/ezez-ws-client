@@ -47,7 +47,8 @@ type Callbacks<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = 
     /**
      * Called when the client is authenticated successfully.
      *
-     * Note: This may be called multiple time if the client reconnects.
+     * Note: This may be called multiple time if the client reconnects. Avoid adding event listeners in this callback
+     * otherwise they will be duplicated after each reconnection.
      */
     onAuthOk?: () => void;
     /**
@@ -58,7 +59,7 @@ type Callbacks<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = 
     onAuthRejected?: (reason: string) => void;
     /**
      * Called when a message (any event) is received from the server.
-     * Use @{link EZEZWebSocketClient["on"]} to listen for specific events.
+     * Use {@link EZEZWebSocketClient.on} to listen for specific events.
      * Please note that if a message is a reply and `onReply` function was given, then this listener will not be called.
      */
     onMessage?: <REvent extends ReplyTupleUnion<
@@ -108,6 +109,18 @@ type Options = {
      * if the connection is closed manually or auth is rejected)
      */
     sendWhenNotConnected?: "ignore" | "throw" | "queueAfterAuth";
+    /**
+     * The number of milliseconds after which the client will clear the awaiting replies.
+     * This prevents memory leaks in case the client is waiting for a reply that will never come.
+     * It must be greater than 0, by default it is set to 5 minutes.
+     *
+     * If clearing occurs and then the awaited reply arrives, it will still be emitted and caught by the `onMessage` and
+     * `on(eventName)` listeners. Use the `ids` parameter to check if something was meant to be a reply if that's
+     * important.
+     *
+     * The check occurs every 15 seconds, so the actual clearing time may be longer than specified.
+     */
+    clearAwaitingRepliesAfterMs?: number;
 };
 
 export {

@@ -1,3 +1,5 @@
+/* eslint-disable max-lines */
+
 import { rethrow, serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
 import EventEmitter from "eventemitter3";
 
@@ -5,13 +7,20 @@ import type { AwaitingReply, Callbacks, EventsToEventEmitter, Ids, Options, Repl
 
 import { EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_AUTH } from "./types";
 
-const defaultOptions: Options = {
+type DefaultOptions = Required<Pick<
+    Options, "sendWhenNotConnected" | "autoReconnect" | "auth" | "clearAwaitingRepliesAfterMs"
+>>;
+
+const defaultOptions: DefaultOptions = {
     sendWhenNotConnected: "queueAfterAuth",
     autoReconnect: true,
     auth: "",
+    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+    clearAwaitingRepliesAfterMs: 5 * 60 * 1000, // 5 minutes
 };
 
 const RECONNECT_TIMEOUT = 1000;
+const AWAITING_REPLIES_INTERVAL = 15_000;
 const PROTOCOL_VERSION = 1;
 const NOT_FOUND = -1;
 
@@ -20,9 +29,9 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
 
     private readonly _protocols: ConstructorParameters<typeof WebSocket>[1];
 
-    private readonly _options: Options;
+    private readonly _options: Options & DefaultOptions;
 
-    private _client: WebSocket | null = null;
+    private readonly _client: WebSocket;
 
     private _autoReconnect: boolean;
 
@@ -98,6 +107,9 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         EZEZWebSocketClient<IncomingEvents, OutgoingEvents>
     >>["once"]>;
 
+    private readonly _awaitingRepliesIntervalId: ReturnType<typeof setInterval>;
+
+    // eslint-disable-next-line max-statements
     public constructor(
         url: ConstructorParameters<typeof WebSocket>[0], protocols?: ConstructorParameters<typeof WebSocket>[1],
         options: Partial<Options> = {},
@@ -106,6 +118,10 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         this._url = url;
         this._protocols = protocols;
         this._options = { ...defaultOptions, ...options };
+        if (this._options.clearAwaitingRepliesAfterMs <= 0) {
+            throw new Error("`clearAwaitingRepliesAfterMs` must be greater than 0");
+        }
+
         this._autoReconnect = this._options.autoReconnect;
         this._callbacks = callbacks ?? {};
         this._ee = new EventEmitter();
@@ -116,15 +132,17 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         this._serialize = serializeToBuffer.bind(null, Buffer, options.serializerArgs ?? []);
         this._unserialize = unserializeFromBuffer.bind(null, Buffer, options.unserializerArgs ?? []);
 
+        this._awaitingRepliesIntervalId = setInterval(this._checkAwaitingReplies, AWAITING_REPLIES_INTERVAL);
+
         this.send = (eventName, args, onReply) => {
             return this._send(eventName, args, null, onReply);
         };
 
+        this._client = new WebSocket(this._url, this._protocols);
         this._connect();
     }
 
     private _connect() {
-        this._client = new WebSocket(this._url, this._protocols);
         this._client.addEventListener("close", this._handleClose);
         this._client.addEventListener("open", this._handleOpen);
         this._client.addEventListener("message", this._handleMessage);
@@ -132,9 +150,9 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
 
     private readonly _handleClose = () => {
         this._closedOnce = true;
-        this._client!.removeEventListener("close", this._handleClose);
-        this._client!.removeEventListener("open", this._handleOpen);
-        this._client!.removeEventListener("message", this._handleMessage);
+        this._client.removeEventListener("close", this._handleClose);
+        this._client.removeEventListener("open", this._handleOpen);
+        this._client.removeEventListener("message", this._handleMessage);
 
         if (this._autoReconnect) {
             setTimeout(() => {
@@ -144,7 +162,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
     };
 
     private readonly _handleOpen = () => {
-        this._client!.send(this._serialize(EVENT_AUTH, this._options.auth, PROTOCOL_VERSION));
+        this._client.send(this._serialize(EVENT_AUTH, this._options.auth, PROTOCOL_VERSION));
     };
 
     private readonly _handleMessage = (messageEvent: MessageEvent) => {
@@ -172,9 +190,8 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
                 return;
             }
             if (eventName === EVENT_AUTH_REJECTED) {
-                this._ee.removeAllListeners();
+                this._cleanUp();
                 this._callbacks.onAuthRejected?.(data[1] as string);
-                this._autoReconnect = false;
                 return;
             }
 
@@ -198,7 +215,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
     };
 
     public get alive() {
-        return this._client?.readyState === WebSocket.OPEN;
+        return this._client.readyState === WebSocket.OPEN;
     }
 
     private _send<TEvent extends keyof OutgoingEvents>(
@@ -209,7 +226,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
             ...replyArgs: REvent
         ) => void,
     ): Ids | undefined {
-        const client = this._client!;
+        const client = this._client;
         if (!this.alive) {
             if (this._options.sendWhenNotConnected === "throw") {
                 throw new Error("Can't send message - client is disconnected");
@@ -245,6 +262,16 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         return { eventId: this._id, replyTo: replyId };
     }
 
+    private readonly _checkAwaitingReplies = () => {
+        const now = Date.now();
+        for (let i = this._awaitingReplies.length - 1; i >= 0; i--) {
+            const reply = this._awaitingReplies[i];
+            if (now - reply!.time > this._options.clearAwaitingRepliesAfterMs) {
+                this._awaitingReplies.splice(i, 1);
+            }
+        }
+    };
+
     /**
      * Get raw WebSocket client, please note that this is current client and if reconnect happens you need to get the
      * new client again or you will just keep the reference to the old one.
@@ -259,9 +286,22 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
      * Close the connection and stop auto reconnecting.
      */
     public close() {
+        this._cleanUp();
+        this._client.close();
+    }
+
+    private _cleanUp() {
+        clearInterval(this._awaitingRepliesIntervalId);
         this._ee.removeAllListeners();
         this._autoReconnect = false;
-        this._client!.close();
+        this._awaitingReplies.length = 0;
+    }
+
+    /**
+     * Gets the count of messages that are waiting for a reply.
+     */
+    public get awaitingRepliesCount(): number {
+        return this._awaitingReplies.length;
     }
 }
 

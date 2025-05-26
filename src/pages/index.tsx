@@ -13,12 +13,14 @@ type IncomingEvents = {
     pong1: [string];
     pong2: [];
 };
-const Index: React.FC = (props) => {
+// eslint-disable-next-line max-lines-per-function
+const Index: React.FC = () => {
     const wsRef = useRef<EZEZWebSocketClient<IncomingEvents, OutgoingEvents>>();
 
     useEffect(() => {
         const ws = new EZEZWebSocketClient<IncomingEvents, OutgoingEvents>("ws://127.0.0.1:6565", undefined, {
             auth: "some-code",
+            clearAwaitingRepliesAfterMs: 5_000,
         }, {
             onAuthOk: () => {
                 console.info("auth ok");
@@ -30,16 +32,6 @@ const Index: React.FC = (props) => {
                 //     console.info("replied to", ids.eventId, "with", replyId);
                 // });
                 ws.send("ping1", []);
-                ws.on("pong2", () => {
-                    console.info("got pong2");
-                });
-                ws.on("pong1", (args, reply, ids) => {
-                    console.info("got pong1 reply", args, ids);
-                    reply("ping2", [1], /* (eventName, args, reply, ids) => {
-                        console.info("got a pong2 reply", eventName, args, ids);
-                        reply("pong2", []);
-                    } */);
-                });
             },
             onMessage: (eventName, args, reply, ids) => {
                 console.info("got some message", {
@@ -49,6 +41,22 @@ const Index: React.FC = (props) => {
                     ids,
                 });
             },
+        });
+
+        const int = setInterval(() => {
+            // console.info("count", ws.awaitingRepliesCount);
+            // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+        }, 1000);
+
+        ws.on("pong2", () => {
+            console.info("got pong2");
+        });
+        ws.on("pong1", (args, reply, ids) => {
+            console.info("got pong1 reply", args, ids);
+            reply("ping2", [1], /* (eventName, args, reply, ids) => {
+                        console.info("got a pong2 reply", eventName, args, ids);
+                        reply("pong2", []);
+                    } */);
         });
 
         console.info("ws started");
@@ -65,6 +73,7 @@ const Index: React.FC = (props) => {
         wsRef.current = ws;
 
         return () => {
+            clearInterval(int);
             ws.close();
             wsRef.current = undefined;
         };
