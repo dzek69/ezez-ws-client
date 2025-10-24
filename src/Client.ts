@@ -5,7 +5,7 @@ import EventEmitter from "eventemitter3";
 
 import type { AwaitingReply, Callbacks, EventsToEventEmitter, Ids, Options, ReplyTupleUnion, TEvents } from "./types";
 
-import { EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_AUTH } from "./types";
+import { EVENT_AUTH, EVENT_AUTH_OK, EVENT_AUTH_REJECTED } from "./types";
 
 type DefaultOptions = Required<Pick<
     Options, "sendWhenNotConnected" | "autoReconnect" | "auth" | "clearAwaitingRepliesAfterMs"
@@ -31,7 +31,8 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
 
     private readonly _options: Options & DefaultOptions;
 
-    private readonly _client: WebSocket;
+    // @ts-expect-error WebSocket is definitely assigned in _connect, but TS can't figure that out
+    private _client: WebSocket;
 
     private _autoReconnect: boolean;
 
@@ -138,11 +139,11 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
             return this._send(eventName, args, null, onReply);
         };
 
-        this._client = new WebSocket(this._url, this._protocols);
         this._connect();
     }
 
     private _connect() {
+        this._client = new WebSocket(this._url, this._protocols);
         this._client.addEventListener("close", this._handleClose);
         this._client.addEventListener("open", this._handleOpen);
         this._client.addEventListener("message", this._handleMessage);
@@ -255,7 +256,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
             this._awaitingReplies.push({
                 time: Date.now(),
                 eventId: this._id,
-                onReply: onReply,
+                onReply,
             });
         }
 
