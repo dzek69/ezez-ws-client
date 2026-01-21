@@ -1,14 +1,14 @@
 /* eslint-disable max-lines */
 
-import { rethrow, serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
+import { noop, rethrow, safe, serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
 import EventEmitter from "eventemitter3";
 
 import type { AwaitingReply, Callbacks, EventsToEventEmitter, Ids, Options, ReplyTupleUnion, TEvents } from "./types";
 
-import { EVENT_AUTH, EVENT_AUTH_OK, EVENT_AUTH_REJECTED } from "./types";
+import { EVENT_AUTH, EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_UNKNOWN_MESSAGE } from "./types";
 
 type DefaultOptions = Required<Pick<
-    Options, "sendWhenNotConnected" | "autoReconnect" | "auth" | "clearAwaitingRepliesAfterMs"
+    Options, "sendWhenNotConnected" | "autoReconnect" | "auth" | "clearAwaitingRepliesAfterMs" | "unknownMessages"
 >>;
 
 const defaultOptions: DefaultOptions = {
@@ -17,12 +17,15 @@ const defaultOptions: DefaultOptions = {
     auth: "",
     // eslint-disable-next-line @typescript-eslint/no-magic-numbers
     clearAwaitingRepliesAfterMs: 5 * 60 * 1000, // 5 minutes
+    unknownMessages: "ignore",
 };
 
 const RECONNECT_TIMEOUT = 1000;
 const AWAITING_REPLIES_INTERVAL = 15_000;
 const PROTOCOL_VERSION = 1;
 const NOT_FOUND = -1;
+
+// TODO messages from the queue are sent after auth ok, but they are not put in the queue if connected but not authenticated
 
 class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = IncomingEvents> {
     private readonly _url: ConstructorParameters<typeof WebSocket>[0];
@@ -51,9 +54,9 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
     /**
      * List of sent messages that are waiting for a reply.
      */
-    private readonly _awaitingReplies: AwaitingReply<IncomingEvents, OutgoingEvents>[] = [];
+    private readonly _awaitingReplies: Array<AwaitingReply<IncomingEvents, OutgoingEvents>> = [];
 
-    private readonly _queue: {
+    private readonly _queue: Array<{
         [K in keyof OutgoingEvents]: [
             K, OutgoingEvents[K], undefined | (
                 <REvent extends ReplyTupleUnion<
@@ -61,9 +64,9 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
                 >>(
                     ...replyArgs: REvent
                 ) => void
-            ),
+            ), sendAsJson: boolean,
         ];
-    }[keyof OutgoingEvents][] = [];
+    }[keyof OutgoingEvents]> = [];
 
     private readonly _callbacks: Callbacks<IncomingEvents, OutgoingEvents>;
 
@@ -76,6 +79,11 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
             ...replyArgs: REvent
         ) => void,
     ) => Ids | undefined;
+
+    public sendJson: <TEvent extends keyof OutgoingEvents>(
+        eventName: TEvent,
+        args: OutgoingEvents[TEvent][0],
+    ) => void;
 
     private readonly _ee: EventEmitter<EventsToEventEmitter<
         IncomingEvents, OutgoingEvents,
@@ -138,6 +146,9 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         this.send = (eventName, args, onReply) => {
             return this._send(eventName, args, null, onReply);
         };
+        this.sendJson = (eventName, arg) => {
+            return this._send(eventName, [arg] as OutgoingEvents[typeof eventName], null, undefined, true); // eslint-disable-line @typescript-eslint/consistent-type-assertions
+        };
 
         this._connect();
     }
@@ -160,18 +171,34 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
                 this._connect();
             }, RECONNECT_TIMEOUT);
         }
+
+        this._callbacks.onDisconnect?.();
     };
 
     private readonly _handleOpen = () => {
-        this._client.send(this._serialize(EVENT_AUTH, this._options.auth, PROTOCOL_VERSION));
+        if (this._options.auth !== null) {
+            this._client.send(this._serialize(EVENT_AUTH, this._options.auth, PROTOCOL_VERSION));
+        }
+        this._callbacks.onConnect?.();
     };
 
+    // eslint-disable-next-line max-lines-per-function
     private readonly _handleMessage = (messageEvent: MessageEvent) => {
         // eslint-disable-next-line max-statements
         (async () => {
             const message = messageEvent.data as unknown;
             if (!(message instanceof Blob)) {
-                // Whatever this is, it's officially not supported
+                if (["emit", "emitTryJson"].includes(this._options.unknownMessages)) {
+                    const finalMsg = this._options.unknownMessages === "emit"
+                        ? message
+                        : safe(() => JSON.parse(message as string) as unknown, message);
+                    this._callbacks.onMessage?.(
+                        EVENT_UNKNOWN_MESSAGE as keyof IncomingEvents,
+                        [finalMsg] as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+                        noop,
+                        { eventId: -1, replyTo: null }, // TODO don't forget to document this special case
+                    );
+                }
                 return;
             }
             const buffer = new Uint8Array(await message.arrayBuffer());
@@ -184,8 +211,8 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
 
             if (eventName === EVENT_AUTH_OK) {
                 this._callbacks.onAuthOk?.();
-                this._queue.forEach(([queuedEventName, queuedArgs, queuedReply]) => {
-                    this.send(queuedEventName, queuedArgs, queuedReply);
+                this._queue.forEach(([queuedEventName, queuedArgs, queuedReply, sendAsJson]) => {
+                    this._send(queuedEventName, queuedArgs, null, queuedReply, sendAsJson);
                 });
                 this._queue.length = 0;
                 return;
@@ -219,6 +246,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         return this._client.readyState === WebSocket.OPEN;
     }
 
+    // eslint-disable-next-line max-statements
     private _send<TEvent extends keyof OutgoingEvents>(
         eventName: TEvent, args: OutgoingEvents[TEvent], replyId: number | null = null,
         onReply?: <REvent extends ReplyTupleUnion<
@@ -226,6 +254,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         >>(
             ...replyArgs: REvent
         ) => void,
+        sendAsJson = false,
     ): Ids | undefined {
         const client = this._client;
         if (!this.alive) {
@@ -243,14 +272,19 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
             }
 
             // The connection had not been established yet
-            this._queue.push([eventName, args, onReply]);
+            this._queue.push([eventName, args, onReply, sendAsJson]);
 
             return;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        const _args = args ? args : [];
-        client.send(this._serialize(eventName, ++this._id, replyId, ..._args));
+        if (sendAsJson) {
+            client.send(JSON.stringify(args[0]));
+        }
+        else {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            const _args = args ? args : [];
+            client.send(this._serialize(eventName, ++this._id, replyId, ..._args));
+        }
 
         if (onReply) {
             this._awaitingReplies.push({
@@ -308,4 +342,5 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
 
 export {
     EZEZWebSocketClient,
+    EVENT_UNKNOWN_MESSAGE,
 };

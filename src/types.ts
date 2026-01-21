@@ -4,6 +4,7 @@ import type { EZEZWebSocketClient } from "./Client";
 const EVENT_AUTH = "ezez-ws::auth";
 const EVENT_AUTH_OK = "ezez-ws::auth-ok";
 const EVENT_AUTH_REJECTED = "ezez-ws::auth-rejected";
+const EVENT_UNKNOWN_MESSAGE = "ezez-ws::unknown-message";
 
 type ReservedNames = `ezez-ws::${string}`;
 type ReservedEventKeys<T extends string> = {
@@ -67,6 +68,15 @@ type Callbacks<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = 
     >>(
         ...replyArgs: REvent
     ) => void;
+    /**
+     * Called when the client is (re)connected. This is called before authentication is performed.
+     * For re-subscribing to events after reconnection, use {@link onAuthOk} instead, to ensure your subscriptions will be accepted.
+     */
+    onConnect?: () => void;
+    /**
+     * Called when the client is disconnected for whatever reason.
+     */
+    onDisconnect?: () => void;
 };
 
 type AwaitingReply<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = IncomingEvents> = {
@@ -89,8 +99,9 @@ type Options = {
     autoReconnect: boolean;
     /**
      * Auth key to send to the server.
+     * Explicitly set to `null` to disable sending authentication in the @ezez/ws-server format.
      */
-    auth: string;
+    auth: string | null;
     /**
      * Custom data serializer options, see `@ezez/utils - serializeToBuffer`
      * Your custom serializer must be compatible with custom deserializer on the server side
@@ -121,12 +132,24 @@ type Options = {
      * The check occurs every 15 seconds, so the actual clearing time may be longer than specified.
      */
     clearAwaitingRepliesAfterMs?: number;
+    /**
+     * How to handle messages received from the server that are not recognized as valid @ezez/ws-server messages.
+     * - "ignore": ignore the message
+     * - "emit": emit an `ezez-ws::unknown-message` event (please use `EVENT_UNKNOWN_MESSAGE` const for comparison) with
+     * the raw data as argument
+     * - "emitTryJson": emit an `ezez-ws::unknown-message` event with the parsed JSON data as argument, or raw data
+     * if parsing fails
+     *
+     * Unknown messages cannot be replied to (it's no-op), their eventId is always `-1`.
+     */
+    unknownMessages: "ignore" | "emit" | "emitTryJson";
 };
 
 export {
     EVENT_AUTH,
     EVENT_AUTH_OK,
     EVENT_AUTH_REJECTED,
+    EVENT_UNKNOWN_MESSAGE,
 };
 
 export type {

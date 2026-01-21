@@ -1,6 +1,6 @@
 {
   "name": "@ezez/ws-client",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repository": "git@github.com:dzek69/ezez-ws-client.git",
   "author": "Jacek Nowacki",
   "license": "MIT",
@@ -17,7 +17,6 @@
     "prepublishOnly": "pnpm audit && pnpm run lint && pnpm run test && pnpm run docs",
     "prepare": "husky install",
     "start:dev": "next dev",
-    "start:dev:compatibility": "TS_NODE_FILES=true pnpm run start:dev",
     "updates": "pnpm dlx npm-check-updates --dep prod",
     "updates:dev": "pnpm dlx npm-check-updates --dep dev",
     "updates:all": "pnpm dlx npm-check-updates"
@@ -35,15 +34,13 @@
   "dependencies": {
     "@ezez/utils": "^4.7.2",
     "buffer": "^6.0.3",
-    "eventemitter3": "^5.0.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "eventemitter3": "^5.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
-    "@ezez/eslint": "^9.37.7",
+    "@ezez/eslint": "^9.39.3",
     "@types/jest": "^29.5.14",
     "@types/react": "^18.2.14",
     "@types/react-dom": "^18.2.6",
@@ -52,12 +49,13 @@
     "husky": "^8.0.3",
     "jest": "^29.7.0",
     "must": "^0.13.4",
-    "next": "^15.5.6",
+    "next": "^16.1.4",
     "nodemon": "^3.1.9",
     "prettier": "^3.4.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "resolve-tspaths": "^0.8.23",
     "sass": "^1.35.2",
-    "ts-node": "^10.9.2",
     "typedoc": "^0.28.4",
     "typescript": "^5.7.3"
   },
