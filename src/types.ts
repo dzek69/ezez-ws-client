@@ -1,10 +1,13 @@
 import type { serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
+import type { ClientRequestArgs } from "http";
+import type { ClientOptions, WebSocket as WSocket } from "ws";
 import type { EZEZWebSocketClient } from "./Client";
 
 const EVENT_AUTH = "ezez-ws::auth";
 const EVENT_AUTH_OK = "ezez-ws::auth-ok";
 const EVENT_AUTH_REJECTED = "ezez-ws::auth-rejected";
 const EVENT_UNKNOWN_MESSAGE = "ezez-ws::unknown-message";
+const EVENT_UNKNOWN_DATA_TYPE = "ezez-ws::unknown-data-type";
 
 type ReservedNames = `ezez-ws::${string}`;
 type ReservedEventKeys<T extends string> = {
@@ -143,6 +146,25 @@ type Options = {
      * Unknown messages cannot be replied to (it's no-op), their eventId is always `-1`.
      */
     unknownMessages: "ignore" | "emit" | "emitTryJson";
+    /**
+     * How to handle data received in the "onMessage" callback of the socket client that is of an unknown type.
+     * Currently supported types are MessageEvent with string or ArrayBuffer data.
+     * - "ignore": ignore the data (maximum compatibility)
+     * - "emit": emit the data as is in an `ezez-ws::unknown-data-type` event (please use `EVENT_UNKNOWN_DATA_TYPE` const for comparison)
+     * - "throw": throw an error when such data is received
+     */
+    unknownDataType: "ignore" | "emit" | "throw";
+    /**
+     * Custom WebSocket constructor to use instead of the global WebSocket.
+     * Useful for Node.js, where native WebSocket cannot do a proper handshake, because server verifies headers, etc.
+     * Only native WebSocket and `ws` package are supported.
+     */
+    WSConstructor?: typeof WebSocket | typeof WSocket;
+    /**
+     * Extra third argument to pass to the WebSocket constructor when using a custom one (`ws` package).
+     * Ignored if native WebSocket is used.
+     */
+    wsConstructorExtraArg?: ClientOptions | ClientRequestArgs;
 };
 
 export {
@@ -150,6 +172,7 @@ export {
     EVENT_AUTH_OK,
     EVENT_AUTH_REJECTED,
     EVENT_UNKNOWN_MESSAGE,
+    EVENT_UNKNOWN_DATA_TYPE,
 };
 
 export type {

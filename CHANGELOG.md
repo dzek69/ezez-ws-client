@@ -6,9 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [UNRELEASED]
 (nothing yet)
 
+## [0.4.0] - 2026-01-21
+### Added
+- ability to pass custom WebSocket client (currently just the `ws` package is supported)
+
 ## [0.3.0] - 2026-01-21
 ### Changed
-- added experimental compatibility with servers not following the @ezez/ws-* protocol (basic string/json messages)
+- added experimental compatibility with servers not following the @ezez/ws-server protocol (basic string/json messages)
 ### Added
 - `onConnect` / `onDisconnect` callbacks
 ### Dev

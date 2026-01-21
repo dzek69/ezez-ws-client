@@ -3,12 +3,19 @@
 import { noop, rethrow, safe, serializeToBuffer, unserializeFromBuffer } from "@ezez/utils";
 import EventEmitter from "eventemitter3";
 
+import type { WebSocket as WSocket } from "ws";
 import type { AwaitingReply, Callbacks, EventsToEventEmitter, Ids, Options, ReplyTupleUnion, TEvents } from "./types";
 
-import { EVENT_AUTH, EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_UNKNOWN_MESSAGE } from "./types";
+import {
+    EVENT_AUTH, EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_UNKNOWN_DATA_TYPE,
+    EVENT_UNKNOWN_MESSAGE,
+} from "./types";
+import { extractMessage } from "./utils";
 
 type DefaultOptions = Required<Pick<
-    Options, "sendWhenNotConnected" | "autoReconnect" | "auth" | "clearAwaitingRepliesAfterMs" | "unknownMessages"
+    Options,
+    | "sendWhenNotConnected" | "autoReconnect" | "auth"
+    | "clearAwaitingRepliesAfterMs" | "unknownMessages" | "unknownDataType" | "WSConstructor"
 >>;
 
 const defaultOptions: DefaultOptions = {
@@ -18,6 +25,8 @@ const defaultOptions: DefaultOptions = {
     // eslint-disable-next-line @typescript-eslint/no-magic-numbers
     clearAwaitingRepliesAfterMs: 5 * 60 * 1000, // 5 minutes
     unknownMessages: "ignore",
+    unknownDataType: "ignore",
+    WSConstructor: WebSocket,
 };
 
 const RECONNECT_TIMEOUT = 1000;
@@ -35,7 +44,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
     private readonly _options: Options & DefaultOptions;
 
     // @ts-expect-error WebSocket is definitely assigned in _connect, but TS can't figure that out
-    private _client: WebSocket;
+    private _client: WebSocket | WSocket;
 
     private _autoReconnect: boolean;
 
@@ -154,7 +163,10 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
     }
 
     private _connect() {
-        this._client = new WebSocket(this._url, this._protocols);
+        this._client = new this._options.WSConstructor(
+            this._url, this._protocols, this._options.wsConstructorExtraArg,
+        );
+        this._client.binaryType = "arraybuffer";
         this._client.addEventListener("close", this._handleClose);
         this._client.addEventListener("open", this._handleOpen);
         this._client.addEventListener("message", this._handleMessage);
@@ -182,27 +194,52 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
         this._callbacks.onConnect?.();
     };
 
+    private readonly _handleUnknownDataType = (data: unknown): null => {
+        if (this._options.unknownDataType === "ignore") {
+            return null;
+        }
+        if (this._options.unknownDataType === "emit") {
+            this._callbacks.onMessage?.(
+                EVENT_UNKNOWN_DATA_TYPE as keyof IncomingEvents,
+                [data] as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+                noop,
+                { eventId: -1, replyTo: null },
+            );
+            return null;
+        }
+
+        throw new Error("Unexpected message type");
+    };
+
     // eslint-disable-next-line max-lines-per-function
-    private readonly _handleMessage = (messageEvent: MessageEvent) => {
+    private readonly _handleMessage = (messageOrEvent: unknown) => {
         // eslint-disable-next-line max-statements
         (async () => {
-            const message = messageEvent.data as unknown;
-            if (!(message instanceof Blob)) {
+            const message = await extractMessage(messageOrEvent)
+                .catch(() => this._handleUnknownDataType(messageOrEvent));
+
+            if (message === null) {
+                // Error handled gracefully
+                return;
+            }
+
+            if (typeof message === "string") {
                 if (["emit", "emitTryJson"].includes(this._options.unknownMessages)) {
                     const finalMsg = this._options.unknownMessages === "emit"
                         ? message
-                        : safe(() => JSON.parse(message as string) as unknown, message);
+                        : safe(() => JSON.parse(message) as unknown, message);
                     this._callbacks.onMessage?.(
                         EVENT_UNKNOWN_MESSAGE as keyof IncomingEvents,
                         [finalMsg] as any, // eslint-disable-line @typescript-eslint/no-explicit-any
                         noop,
-                        { eventId: -1, replyTo: null }, // TODO don't forget to document this special case
+                        { eventId: -1, replyTo: null },
                     );
                 }
                 return;
             }
-            const buffer = new Uint8Array(await message.arrayBuffer());
-            const data = this._unserialize(buffer);
+
+            // TODO nicer handle of messages that cannot be deserialized, not always throwing
+            const data = this._unserialize(message);
 
             const eventName = data[0] as keyof IncomingEvents;
             const [, eventId, replyTo, ...args] = data as [
@@ -343,4 +380,5 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
 export {
     EZEZWebSocketClient,
     EVENT_UNKNOWN_MESSAGE,
+    EVENT_UNKNOWN_DATA_TYPE,
 };
