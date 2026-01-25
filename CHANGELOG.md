@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [UNRELEASED]
 (nothing yet)
 
+## [0.4.1] - 2026-01-25
+### Changed
+- added OnCallback utility type
+
 ## [0.4.0] - 2026-01-21
 ### Added
 - ability to pass custom WebSocket client (currently just the `ws` package is supported)

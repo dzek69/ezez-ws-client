@@ -377,6 +377,42 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
     }
 }
 
+type InferInOut<X extends EZEZWebSocketClient<any, any>> // eslint-disable-line @typescript-eslint/no-explicit-any
+    = X extends EZEZWebSocketClient<infer In, infer Out> ? [In, Out] : never;
+
+/**
+ * Utility type for typing event handler callbacks that can be defined outside of inline `client.on()` calls.
+ *
+ * @template Srv - The client type (use `typeof yourClientInstance`)
+ * @template Ev - The event name (must be a key of IncomingEvents)
+ *
+ * @example
+ * ```typescript
+ * const ws = new EZEZWebsocketClient<IncomingEvents, OutgoingEvents>(...);
+ *
+ * const ping2Handler: OnCallback<typeof ws, "ping2"> = (args, reply, ids) => {
+ *   // args, reply, etc. are typed
+ * };
+ *
+ * client.on("ping2", ping2Handler);
+ * ```
+ */
+type OnCallback<
+    Cli extends EZEZWebSocketClient<any, any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+    Ev extends keyof InferInOut<Cli>[0],
+> = EventsToEventEmitter<InferInOut<Cli>[0], InferInOut<Cli>[1], Cli>[Ev];
+
+// type OnCallback<Srv extends EZEZWebSocketClient<any>, Ev> = (args: InferInOut<Srv>[0][Ev], reply: any) => null;
+
+// type OnCallback<Srv extends EZEZWebSocketClient<any>, Ev> = Parameters<OmitThisParameter<EventEmitter<EventsToEventEmitter<
+//     InferInOut<Srv>[0], InferInOut<Srv>[1],
+//     EZEZServerClient<InferInOut<Srv>[0], InferInOut<Srv>[1]>
+// >>["on"]>>[1]
+
+export type {
+    OnCallback,
+};
+
 export {
     EZEZWebSocketClient,
     EVENT_UNKNOWN_MESSAGE,

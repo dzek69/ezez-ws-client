@@ -1,5 +1,7 @@
 import { WebSocket as WS } from "ws";
 
+import type { OnCallback } from "../Client";
+
 import { EZEZWebSocketClient } from "../Client";
 
 type OutgoingEvents = {
@@ -13,7 +15,9 @@ type IncomingEvents = {
     pong2: [];
 };
 
-const ws = new EZEZWebSocketClient<IncomingEvents, OutgoingEvents>("ws://127.0.0.1:6565", undefined, {
+const DATA_ADDRESS = "https://ws-live-data.polymarket.com/";
+
+const ws = new EZEZWebSocketClient<IncomingEvents, OutgoingEvents>(DATA_ADDRESS, undefined, {
     auth: "some-code",
     clearAwaitingRepliesAfterMs: 5_000,
     unknownDataType: "throw",
@@ -31,6 +35,13 @@ const ws = new EZEZWebSocketClient<IncomingEvents, OutgoingEvents>("ws://127.0.0
         // });
         ws.send("ping1", []);
         ws.send("ping2", [1]);
+
+        const pong1Handler: OnCallback<typeof ws, "pong1"> = (args, reply, ids) => {
+            // args is correctly typed as [string]
+            console.info(args[0].toUpperCase());
+        };
+
+        ws.on("pong1", pong1Handler);
     },
     onConnect() {
         console.info("connected to ws server");
