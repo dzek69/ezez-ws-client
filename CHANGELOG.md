@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [UNRELEASED]
 (nothing yet)
 
+## [0.4.3] - 2026-01-27
+### Fixed
+- imports without extension in prod esm build
+
 ## [0.4.2] - 2026-01-27
 ### Changed
 - types now allows to define incoming messages for unknown events (it's breaking if you ignored exported consts and
