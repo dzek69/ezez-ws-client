@@ -2,17 +2,21 @@ import { WebSocket as WS } from "ws";
 
 import type { OnCallback } from "../Client";
 
-import { EZEZWebSocketClient } from "../Client";
+import { EVENT_UNKNOWN_MESSAGE, EZEZWebSocketClient } from "../Client";
 
 type OutgoingEvents = {
     ping1: [];
     ping2: [number];
     whatever: [object];
+    // "ezez-ws:incoming:unknown-message": [data: { custom: string }];
+    // "ezez-ws::unknown-message": [data: { custom: string }];
 };
 
 type IncomingEvents = {
-    pong1: [string];
-    pong2: [];
+    "pong1": [string];
+    "pong2": [];
+    // Users can now type allowed incoming-specific events:
+    "ezez-ws:incoming:unknown-message": [data: { custom: string }];
 };
 
 const DATA_ADDRESS = "https://ws-live-data.polymarket.com/";
@@ -72,6 +76,12 @@ ws.on("pong1", (args, reply, ids) => {
                     console.info("got a pong2 reply", eventName, args, ids);
                     reply("pong2", []);
                 } */);
+});
+
+// Listen to allowed incoming-specific events with proper typing
+ws.on(EVENT_UNKNOWN_MESSAGE, (args) => {
+    // args is properly typed as [data: { custom: string }]
+    console.info("Unknown message:", args[0].custom);
 });
 
 console.info("ws started");

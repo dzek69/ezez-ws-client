@@ -6,25 +6,43 @@ import type { EZEZWebSocketClient } from "./Client";
 const EVENT_AUTH = "ezez-ws::auth";
 const EVENT_AUTH_OK = "ezez-ws::auth-ok";
 const EVENT_AUTH_REJECTED = "ezez-ws::auth-rejected";
-const EVENT_UNKNOWN_MESSAGE = "ezez-ws::unknown-message";
-const EVENT_UNKNOWN_DATA_TYPE = "ezez-ws::unknown-data-type";
+const EVENT_UNKNOWN_MESSAGE = "ezez-ws:incoming:unknown-message";
+const EVENT_UNKNOWN_DATA_TYPE = "ezez-ws:incoming:unknown-data-type";
 
 type ReservedNames = `ezez-ws::${string}`;
+type ReservedAllowedIncomingNames = `ezez-ws:incoming:${string}`;
+
 type ReservedEventKeys<T extends string> = {
     [K in T]?: never;
 };
 
 /**
- * Generic type representing all events with the data that will come with them.
+ * Generic type representing incoming events (events you can listen to) with the data that will come with them.
+ * Events starting with `ezez-ws::` are reserved and blocked.
+ * Events starting with `ezez-ws:incoming:` are allowed (e.g., `ezez-ws:incoming:unknown-message`).
  * @example
  * ```typescript
  * type IncomingEvents = {
  *     addItem: [item: string, quantity: number],
  *     removeItem: [item: string],
+ *     "ezez-ws:incoming:unknown-message": [data: unknown], // optional: type unknown messages
  * }
  * ```
  */
-type TEvents = Record<string, unknown[]> & ReservedEventKeys<ReservedNames>;
+type TIncomingEvents = Record<string, unknown[]> & ReservedEventKeys<ReservedNames>;
+
+/**
+ * Generic type representing outgoing events (events you can send) with the data that will come with them.
+ * Events starting with `ezez-ws::` and `ezez-ws:incoming:` are reserved and blocked.
+ * @example
+ * ```typescript
+ * type OutgoingEvents = {
+ *     sendMessage: [text: string],
+ *     updateItem: [id: number, value: string],
+ * }
+ * ```
+ */
+type TOutgoingEvents = TIncomingEvents & ReservedEventKeys<ReservedAllowedIncomingNames>;
 
 type Ids = {
     eventId: number;
@@ -32,7 +50,7 @@ type Ids = {
 };
 
 type ReplyTupleUnion<
-    IncomingEvents extends TEvents, OutgoingEvents extends TEvents,
+    IncomingEvents extends TIncomingEvents, OutgoingEvents extends TOutgoingEvents,
     Client extends EZEZWebSocketClient<IncomingEvents, OutgoingEvents>,
 > = {
     [K in keyof IncomingEvents]: [
@@ -41,13 +59,13 @@ type ReplyTupleUnion<
 }[keyof IncomingEvents];
 
 type EventsToEventEmitter<
-    IncomingEvents extends TEvents, OutgoingEvents extends TEvents,
+    IncomingEvents extends TIncomingEvents, OutgoingEvents extends TOutgoingEvents,
     Client extends EZEZWebSocketClient<IncomingEvents, OutgoingEvents>,
 > = {
     [K in keyof IncomingEvents]: (args: IncomingEvents[K], reply: Client["send"], ids: Ids) => void
 };
 
-type Callbacks<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = IncomingEvents> = {
+type Callbacks<IncomingEvents extends TIncomingEvents, OutgoingEvents extends TOutgoingEvents> = {
     /**
      * Called when the client is authenticated successfully.
      *
@@ -82,7 +100,7 @@ type Callbacks<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = 
     onDisconnect?: () => void;
 };
 
-type AwaitingReply<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = IncomingEvents> = {
+type AwaitingReply<IncomingEvents extends TIncomingEvents, OutgoingEvents extends TOutgoingEvents> = {
     /**
      * Time when registered the need for a reply, used to clean up old listeners that never got the reply
      */
@@ -176,7 +194,8 @@ export {
 };
 
 export type {
-    TEvents,
+    TIncomingEvents,
+    TOutgoingEvents,
     ReplyTupleUnion,
     EventsToEventEmitter,
     Callbacks,

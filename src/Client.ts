@@ -4,7 +4,9 @@ import { noop, rethrow, safe, serializeToBuffer, unserializeFromBuffer } from "@
 import EventEmitter from "eventemitter3";
 
 import type { WebSocket as WSocket } from "ws";
-import type { AwaitingReply, Callbacks, EventsToEventEmitter, Ids, Options, ReplyTupleUnion, TEvents } from "./types";
+import type {
+    AwaitingReply, Callbacks, EventsToEventEmitter, Ids, Options, ReplyTupleUnion, TIncomingEvents, TOutgoingEvents,
+} from "./types";
 
 import {
     EVENT_AUTH, EVENT_AUTH_OK, EVENT_AUTH_REJECTED, EVENT_UNKNOWN_DATA_TYPE,
@@ -36,15 +38,17 @@ const NOT_FOUND = -1;
 
 // TODO messages from the queue are sent after auth ok, but they are not put in the queue if connected but not authenticated
 
-class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends TEvents = IncomingEvents> {
+class EZEZWebSocketClient<
+    IncomingEvents extends TIncomingEvents,
+    OutgoingEvents extends TOutgoingEvents = Extract<IncomingEvents, TOutgoingEvents>,
+> {
     private readonly _url: ConstructorParameters<typeof WebSocket>[0];
 
     private readonly _protocols: ConstructorParameters<typeof WebSocket>[1];
 
     private readonly _options: Options & DefaultOptions;
 
-    // @ts-expect-error WebSocket is definitely assigned in _connect, but TS can't figure that out
-    private _client: WebSocket | WSocket;
+    private _client!: WebSocket | WSocket;
 
     private _autoReconnect: boolean;
 
@@ -131,7 +135,7 @@ class EZEZWebSocketClient<IncomingEvents extends TEvents, OutgoingEvents extends
     public constructor(
         url: ConstructorParameters<typeof WebSocket>[0], protocols?: ConstructorParameters<typeof WebSocket>[1],
         options: Partial<Options> = {},
-        callbacks?: Callbacks<IncomingEvents>,
+        callbacks?: Callbacks<IncomingEvents, OutgoingEvents>,
     ) {
         this._url = url;
         this._protocols = protocols;
@@ -402,15 +406,10 @@ type OnCallback<
     Ev extends keyof InferInOut<Cli>[0],
 > = EventsToEventEmitter<InferInOut<Cli>[0], InferInOut<Cli>[1], Cli>[Ev];
 
-// type OnCallback<Srv extends EZEZWebSocketClient<any>, Ev> = (args: InferInOut<Srv>[0][Ev], reply: any) => null;
-
-// type OnCallback<Srv extends EZEZWebSocketClient<any>, Ev> = Parameters<OmitThisParameter<EventEmitter<EventsToEventEmitter<
-//     InferInOut<Srv>[0], InferInOut<Srv>[1],
-//     EZEZServerClient<InferInOut<Srv>[0], InferInOut<Srv>[1]>
-// >>["on"]>>[1]
-
 export type {
     OnCallback,
+    TIncomingEvents as IncomingEvents,
+    TOutgoingEvents as OutgoingEvents,
 };
 
 export {
