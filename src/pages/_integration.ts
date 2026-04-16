@@ -39,7 +39,7 @@ const ws = new EZEZWebSocketClient<IncomingEvents, OutgoingEvents>(DATA_ADDRESS,
         //     console.info("replied to", ids.eventId, "with", replyId);
         // });
         ws.send("ping1", []);
-        ws.send("ping2", [6, 9]);
+        ws.send("ping2", [6, 9]); // eslint-disable-line @typescript-eslint/no-magic-numbers
 
         const pong1Handler: OnCallback<typeof ws, "pong1"> = (args, reply, ids) => {
             console.info(args[0].toUpperCase());

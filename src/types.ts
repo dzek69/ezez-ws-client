@@ -98,6 +98,11 @@ type Callbacks<IncomingEvents extends TIncomingEvents, OutgoingEvents extends TO
      * Called when the client is disconnected for whatever reason.
      */
     onDisconnect?: () => void;
+    /**
+     * Called when an error occurs in the WebSocket connection. The error is emitted by the WebSocket and can be of various types,
+     * With autoreconnect you usually don't have to define this callback - Node won't crash, because the internal websocket error is always consumed.
+     */
+    onError?: (error: unknown) => void;
 };
 
 type AwaitingReply<IncomingEvents extends TIncomingEvents, OutgoingEvents extends TOutgoingEvents> = {

@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [UNRELEASED]
 (nothing yet)
 
+## [0.4.5] - 2026-04-16
+### Fixed
+- not registering `error` event causes node to crash
+### Added
+- `onError` callback
+### Dev
+- packages & pnpm bump
+
 ## [0.4.4] - 2026-01-28
 ### Fixed
 - not being able to receive more than 4 items in a single message

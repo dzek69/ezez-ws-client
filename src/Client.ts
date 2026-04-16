@@ -96,7 +96,7 @@ class EZEZWebSocketClient<
     public sendJson: <TEvent extends keyof OutgoingEvents>(
         eventName: TEvent,
         args: OutgoingEvents[TEvent][0],
-    ) => void;
+    ) => Ids | undefined;
 
     private readonly _ee: EventEmitter<EventsToEventEmitter<
         IncomingEvents, OutgoingEvents,
@@ -174,6 +174,7 @@ class EZEZWebSocketClient<
         this._client.addEventListener("close", this._handleClose);
         this._client.addEventListener("open", this._handleOpen);
         this._client.addEventListener("message", this._handleMessage);
+        this._client.addEventListener("error", this._handleError);
     }
 
     private readonly _handleClose = () => {
@@ -181,6 +182,7 @@ class EZEZWebSocketClient<
         this._client.removeEventListener("close", this._handleClose);
         this._client.removeEventListener("open", this._handleOpen);
         this._client.removeEventListener("message", this._handleMessage);
+        this._client.removeEventListener("error", this._handleError);
 
         if (this._autoReconnect) {
             setTimeout(() => {
@@ -196,6 +198,10 @@ class EZEZWebSocketClient<
             this._client.send(this._serialize(EVENT_AUTH, this._options.auth, PROTOCOL_VERSION));
         }
         this._callbacks.onConnect?.();
+    };
+
+    private readonly _handleError = (err: unknown) => {
+        this._callbacks.onError?.(err);
     };
 
     private readonly _handleUnknownDataType = (data: unknown): null => {
@@ -402,8 +408,8 @@ type InferInOut<X extends EZEZWebSocketClient<any, any>> // eslint-disable-line 
  * ```
  */
 type OnCallback<
-    Cli extends EZEZWebSocketClient<any, any>, // eslint-disable-line @typescript-eslint/no-explicit-any
-    Ev extends keyof InferInOut<Cli>[0],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Cli extends EZEZWebSocketClient<any, any>, Ev extends keyof InferInOut<Cli>[0],
 > = EventsToEventEmitter<InferInOut<Cli>[0], InferInOut<Cli>[1], Cli>[Ev];
 
 export type {
