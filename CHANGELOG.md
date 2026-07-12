@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [UNRELEASED]
 (nothing yet)
 
+## [0.4.6] - 2026-07-12
+### Dev
+- added `type:module` to package.json, which should fix issues with using this library with native esm
+- deps upgrade
+
 ## [0.4.5] - 2026-04-16
 ### Fixed
 - not registering `error` event causes node to crash
